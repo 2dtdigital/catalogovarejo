@@ -3,11 +3,184 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Modelos Mega Fitness</title>
+  <title>Catálogo Revenda</title>
+  <style>
+    html, body {
+      margin: 0;
+      height: 100%;
+      background: #ffffff;
+      font-family: Arial, sans-serif;
+    }
+
+    .wrap {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      padding: 24px;
+      box-sizing: border-box;
+    }
+
+    .status-box {
+      text-align: center;
+      max-width: 420px;
+      width: 100%;
+    }
+
+    .spinner {
+      width: 42px;
+      height: 42px;
+      margin: 0 auto 16px;
+      border: 4px solid #e5e5e5;
+      border-top: 4px solid #111111;
+      border-radius: 50%;
+      animation: spin 0.9s linear infinite;
+    }
+
+    .status {
+      font-size: 16px;
+      color: #222;
+      line-height: 1.5;
+    }
+
+    .substatus {
+      margin-top: 8px;
+      font-size: 13px;
+      color: #666;
+    }
+
+    iframe {
+      width: 100%;
+      height: 100vh;
+      border: 0;
+      display: none;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    .retry-btn {
+      margin-top: 16px;
+      padding: 10px 16px;
+      border: 0;
+      background: #111111;
+      color: #fff;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+
+    .retry-btn:hover {
+      opacity: 0.92;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
 </head>
 <body>
+  <div id="loadingWrap" class="wrap">
+    <div class="status-box">
+      <div class="spinner"></div>
+      <div id="status" class="status">Carregando catálogo mais recente...</div>
+      <div id="substatus" class="substatus">Aguarde alguns segundos.</div>
+      <button id="retryBtn" class="retry-btn hidden" onclick="carregarPDF()">Tentar novamente</button>
+    </div>
+  </div>
+
+  <iframe id="pdfViewer" allow="autoplay"></iframe>
+
   <script>
-    window.location.replace("/modelos.html");
+    const API_KEY = "SUA_API_KEY";
+    const FOLDER_ID = "ID_DA_PASTA_REVENDA";
+
+    const loadingWrap = document.getElementById("loadingWrap");
+    const statusEl = document.getElementById("status");
+    const substatusEl = document.getElementById("substatus");
+    const retryBtn = document.getElementById("retryBtn");
+    const pdfViewer = document.getElementById("pdfViewer");
+
+    function setStatus(message, submessage = "", showRetry = false) {
+      statusEl.textContent = message;
+      substatusEl.textContent = submessage;
+      retryBtn.classList.toggle("hidden", !showRetry);
+    }
+
+    async function carregarPDF() {
+      try {
+        loadingWrap.classList.remove("hidden");
+        pdfViewer.style.display = "none";
+        retryBtn.classList.add("hidden");
+
+        setStatus(
+          "Carregando catálogo mais recente...",
+          "Buscando o PDF mais atualizado na pasta."
+        );
+
+        const query = encodeURIComponent(
+          `'${FOLDER_ID}' in parents and mimeType='application/pdf' and trashed=false`
+        );
+
+        const url = `https://www.googleapis.com/drive/v3/files?q=${query}&orderBy=modifiedTime%20desc&pageSize=1&fields=files(id,name,modifiedTime)&supportsAllDrives=true&includeItemsFromAllDrives=true&key=${API_KEY}`;
+
+        const response = await fetch(url, {
+          method: "GET",
+          cache: "no-store"
+        });
+
+        if (!response.ok) {
+          throw new Error(`Erro HTTP ${response.status}`);
+        }
+
+        const data = await response.json();
+
+        if (!data.files || data.files.length === 0) {
+          setStatus(
+            "Nenhum PDF encontrado.",
+            "A pasta está vazia ou não há arquivos PDF disponíveis.",
+            true
+          );
+          return;
+        }
+
+        const file = data.files[0];
+        const previewURL = `https://drive.google.com/file/d/${file.id}/preview?ts=${Date.now()}`;
+
+        setStatus(
+          "Abrindo catálogo...",
+          `Arquivo encontrado: ${file.name}`
+        );
+
+        pdfViewer.onload = function () {
+          loadingWrap.classList.add("hidden");
+          pdfViewer.style.display = "block";
+        };
+
+        pdfViewer.src = previewURL;
+
+        setTimeout(() => {
+          if (pdfViewer.style.display !== "block") {
+            setStatus(
+              "O catálogo está demorando para abrir.",
+              "Isso pode acontecer por lentidão do Google Drive. Aguarde ou tente novamente.",
+              true
+            );
+          }
+        }, 8000);
+
+      } catch (error) {
+        console.error("Erro ao carregar PDF:", error);
+        setStatus(
+          "Erro ao carregar o catálogo.",
+          "Verifique a API Key, o ID da pasta e as permissões dos arquivos no Google Drive.",
+          true
+        );
+      }
+    }
+
+    carregarPDF();
   </script>
 </body>
 </html>
